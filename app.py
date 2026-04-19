@@ -407,8 +407,8 @@ if "company_name" not in st.session_state:
 with st.sidebar:
     st.markdown(
         '<div class="qs-sidebar-brand">'
-        '<h2>📈 ASFM Agent</h2>'
-        '<p>LLM investor · Gao et al. 2024</p>'
+        '<h2>🎩 Legends Mode</h2>'
+        '<p>10 Investing Legends · ASFM × Gao 2024</p>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -426,31 +426,41 @@ with st.sidebar:
             label_visibility="collapsed",
         )
 
-    st.markdown('<div class="qs-section">🧠 LLM</div>', unsafe_allow_html=True)
-    llm_model = st.selectbox(
-        "LLM",
-        options=["gpt-5.4", "gpt-4.1", "gpt-4o"],
-        index=0,
-        label_visibility="collapsed",
-    )
+    # LLM is fixed — gpt-5.4-nano only (no selector)
+    llm_model = "gpt-5.4-nano"
 
     st.markdown('<div class="qs-section">🎭 Run mode</div>', unsafe_allow_html=True)
     run_mode = st.radio(
         "Mode",
-        options=["Compare all 4 agents", "Single agent"],
+        options=["Compare selected legends", "Single legend"],
         index=0,
         label_visibility="collapsed",
     )
 
-    if run_mode == "Single agent":
+    if run_mode == "Single legend":
         agent_type = st.selectbox(
-            "Agent type",
+            "Legend",
             options=list(AGENT_PROFILES.keys()),
             format_func=lambda k: f"{AGENT_PROFILES[k]['emoji']} {AGENT_PROFILES[k]['name']}",
             index=0,
+            label_visibility="collapsed",
         )
+        selected_agents: list[str] = [agent_type]
     else:
         agent_type = None
+        # Balanced default: 5 distinct philosophies (Wilmott + value + quant + macro + growth)
+        default_picks = ["wilmott", "buffett", "simons", "dalio", "wood"]
+        selected_agents = st.multiselect(
+            "Legends to compare",
+            options=list(AGENT_PROFILES.keys()),
+            default=default_picks,
+            format_func=lambda k: f"{AGENT_PROFILES[k]['emoji']} {AGENT_PROFILES[k]['name']}",
+            label_visibility="collapsed",
+        )
+        st.caption(
+            f"🕑 {len(selected_agents)} legend(s) × ~3s each = "
+            f"~{max(1, len(selected_agents)*3)}s total"
+        )
 
     st.markdown('<div class="qs-section">📋 Scenarios</div>', unsafe_allow_html=True)
     example_name = st.selectbox(
@@ -488,9 +498,9 @@ with st.sidebar:
 
 st.markdown(
     '<div class="qs-hero">'
-    '<h1>📈 ASFM Trading Agent</h1>'
-    '<div class="tagline">Profile · Observation · Tool-learning</div>'
-    '<div class="paper-ref">Gao et al. · arXiv:2406.19966 · Jun 2024</div>'
+    '<h1>🎩 Legendary Investor Agent</h1>'
+    '<div class="tagline">10 legends · same market · different decisions</div>'
+    '<div class="paper-ref">ASFM framework · Gao et al. · arXiv:2406.19966 · 2024</div>'
     '</div>',
     unsafe_allow_html=True,
 )
@@ -502,17 +512,21 @@ st.markdown(
 
 if not api_key:
     st.info("👈 ใส่ OpenAI API Key ที่ sidebar เพื่อเริ่ม")
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (key, prof) in zip((c1, c2, c3, c4), AGENT_PROFILES.items()):
-        with col:
-            st.markdown(
-                f'<div class="qs-feature">'
-                f'<div class="icon">{prof["emoji"]}</div>'
-                f'<h3>{prof["name"].upper()}</h3>'
-                f'<p>{prof["tagline"]}</p>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+    # Grid of 10 legendary investors, 5 per row
+    keys = list(AGENT_PROFILES.keys())
+    for start in (0, 5):
+        cols = st.columns(5)
+        for col, key in zip(cols, keys[start:start + 5]):
+            prof = AGENT_PROFILES[key]
+            with col:
+                st.markdown(
+                    f'<div class="qs-feature">'
+                    f'<div class="icon">{prof["emoji"]}</div>'
+                    f'<h3>{prof["name"].upper()}</h3>'
+                    f'<p>{prof["tagline"]}</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
     st.stop()
 
 
@@ -624,7 +638,10 @@ if analyze:
         llm = ChatOpenAI(model=llm_model, api_key=api_key, temperature=0.2)
         results: dict[str, TradingDecision] = {}
 
-        agents_to_run = list(AGENT_PROFILES.keys()) if run_mode.startswith("Compare") else [agent_type]
+        agents_to_run = [k for k in selected_agents if k in AGENT_PROFILES]
+        if not agents_to_run:
+            st.error("⚠️ Select at least one legend from the sidebar.")
+            st.stop()
 
         with st.status(f"🔬 Running {len(agents_to_run)} agent(s)...", expanded=True) as status:
             for k in agents_to_run:
